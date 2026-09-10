@@ -47,9 +47,7 @@ try:
     )
 
     # Webull Australia API endpoint
-    api_client.add_endpoint(
-        "au",
-        "https://openapi.webull.com.au"
+    
     )
 
     data_client = DataClient(api_client)
