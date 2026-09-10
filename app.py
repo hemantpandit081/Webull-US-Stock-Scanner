@@ -6,9 +6,9 @@ from webull.data.common.category import Category
 from webull.data.common.timespan import Timespan
 
 
-# ==============================
+# ---------------------------------------------------------
 # PAGE
-# ==============================
+# ---------------------------------------------------------
 
 st.set_page_config(
     page_title="Webull US Stock Scanner",
@@ -17,13 +17,12 @@ st.set_page_config(
 )
 
 st.title("📈 Webull US Stock Scanner")
-
 st.write("Testing Webull OpenAPI market-data connection.")
 
 
-# ==============================
-# GET WEBULL KEYS
-# ==============================
+# ---------------------------------------------------------
+# WEBULL API KEYS
+# ---------------------------------------------------------
 
 try:
     APP_KEY = st.secrets["WEBULL_APP_KEY"]
@@ -34,21 +33,21 @@ except Exception:
     st.stop()
 
 
-# ==============================
-# CONNECT TO WEBULL
-# ==============================
+# ---------------------------------------------------------
+# WEBULL CONNECTION
+# ---------------------------------------------------------
 
 try:
 
     api_client = ApiClient(
         APP_KEY,
         APP_SECRET,
-        "us"
+        "au"
     )
 
     api_client.add_endpoint(
-        "us",
-        "api.webull.com"
+        "au",
+        "api.webull.com.au"
     )
 
     data_client = DataClient(api_client)
@@ -62,9 +61,9 @@ except Exception as e:
     st.stop()
 
 
-# ==============================
+# ---------------------------------------------------------
 # MARKET DATA TEST
-# ==============================
+# ---------------------------------------------------------
 
 st.subheader("Market Data Test")
 
@@ -101,14 +100,15 @@ if st.button("Test Webull Data"):
     except Exception as e:
 
         st.error("❌ Market data request failed.")
-
         st.code(str(e))
 
 
-# ==============================
+# ---------------------------------------------------------
 # FOOTER
-# ==============================
+# ---------------------------------------------------------
 
 st.divider()
 
-st.caption("Webull OpenAPI • US Stock Market Data")
+st.caption(
+    "Webull OpenAPI • US Stock Market Data"
+)
