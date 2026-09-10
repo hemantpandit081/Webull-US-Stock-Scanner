@@ -984,7 +984,7 @@ def scanner_fragment():
                 src="{tradingview_url}"
                 style="
                     width:100%;
-                    height:780px;
+                    height:600px;
                     border:none;
                 "
                 frameborder="0"
