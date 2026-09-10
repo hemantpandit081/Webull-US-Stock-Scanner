@@ -2,9 +2,10 @@ import streamlit as st
 import pandas as pd
 import json
 import os
+import requests
+import io
 from datetime import datetime
 from zoneinfo import ZoneInfo
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import streamlit.components.v1 as components
 
 from webull.core.client import ApiClient
@@ -91,7 +92,8 @@ div.stButton > button {
 APP_KEY = st.secrets["WEBULL_APP_KEY"]
 APP_SECRET = st.secrets["WEBULL_APP_SECRET"]
 
-MAX_WORKERS = 10
+REGION = "au"
+WEBULL_ENDPOINT = "api.webull.com.au"
 
 
 @st.cache_resource
@@ -100,12 +102,12 @@ def create_webull_client():
     client = ApiClient(
         APP_KEY,
         APP_SECRET,
-        "au"
+        REGION
     )
 
     client.add_endpoint(
-        "au",
-        "api.webull.com.au"
+        REGION,
+        WEBULL_ENDPOINT
     )
 
     return DataClient(client)
@@ -141,7 +143,12 @@ DEFAULT_SETTINGS = {
 
     "auto_scan": True,
 
-    "chart_interval": "1"
+    "chart_interval": "1",
+
+    # Whole market scanner
+    "universe_limit": 5000,
+
+    "batch_size": 20
 
 }
 
@@ -196,94 +203,287 @@ def save_settings(settings):
 # =========================================================
 
 if "settings" not in st.session_state:
-    st.session_state.settings = load_settings()
+
+    st.session_state.settings = (
+        load_settings()
+    )
 
 
 if "selected_symbol" not in st.session_state:
+
     st.session_state.selected_symbol = "AAPL"
 
 
 if "previous_volumes" not in st.session_state:
+
     st.session_state.previous_volumes = {}
 
 
 if "volume_history" not in st.session_state:
+
     st.session_state.volume_history = {}
 
 
 if "scan_results" not in st.session_state:
-    st.session_state.scan_results = pd.DataFrame()
+
+    st.session_state.scan_results = (
+        pd.DataFrame()
+    )
 
 
 if "scan_count" not in st.session_state:
+
     st.session_state.scan_count = 0
 
 
 if "last_scan_time" not in st.session_state:
+
     st.session_state.last_scan_time = None
 
 
 if "scan_duration" not in st.session_state:
+
     st.session_state.scan_duration = 0
 
 
-# ---------------------------------------------------------
-# NEW: TRIGGER TIMES
-# ---------------------------------------------------------
-
 if "trigger_times" not in st.session_state:
+
     st.session_state.trigger_times = {}
 
 
-# ---------------------------------------------------------
-# NEW: CURRENTLY TRIGGERED STOCKS
-# ---------------------------------------------------------
-
 if "active_symbols" not in st.session_state:
+
     st.session_state.active_symbols = set()
+
+
+if "stock_universe" not in st.session_state:
+
+    st.session_state.stock_universe = []
+
+
+if "universe_loaded" not in st.session_state:
+
+    st.session_state.universe_loaded = False
 
 
 settings = st.session_state.settings
 
 
 # =========================================================
-# STOCK UNIVERSE
+# LOAD US STOCK UNIVERSE
 # =========================================================
 
-STOCKS = [
+@st.cache_data(ttl=3600)
+def download_us_stock_universe():
 
-    "AAPL",
-    "MSFT",
-    "NVDA",
-    "AMZN",
-    "META",
-    "GOOGL",
-    "GOOG",
-    "TSLA",
-    "AVGO",
-    "AMD",
-    "NFLX",
-    "INTC",
-    "MU",
-    "QCOM",
-    "AMAT",
-    "ARM",
-    "PLTR",
-    "SMCI",
-    "COIN",
-    "HOOD",
-    "SOFI",
-    "BAC",
-    "JPM",
-    "WMT",
-    "COST",
-    "UBER",
-    "SHOP",
-    "PDD",
-    "NIO",
-    "RIVN"
+    symbols = set()
 
-]
+    # -----------------------------------------------------
+    # NASDAQ LISTED
+    # -----------------------------------------------------
+
+    try:
+
+        url = (
+            "https://www.nasdaqtrader.com/"
+            "dynamic/SymDir/nasdaqlisted.txt"
+        )
+
+        response = requests.get(
+            url,
+            timeout=20
+        )
+
+        if response.status_code == 200:
+
+            text = response.text
+
+            df = pd.read_csv(
+                io.StringIO(text),
+                sep="|"
+            )
+
+            if "Symbol" in df.columns:
+
+                for _, row in df.iterrows():
+
+                    symbol = str(
+                        row["Symbol"]
+                    ).strip().upper()
+
+                    if not symbol:
+                        continue
+
+                    if symbol == "FILE CREATION TIME":
+                        continue
+
+                    # Exclude test issues
+                    test_issue = str(
+                        row.get(
+                            "Test Issue",
+                            "N"
+                        )
+                    ).upper()
+
+                    if test_issue == "Y":
+                        continue
+
+                    # Exclude ETFs
+                    etf = str(
+                        row.get(
+                            "ETF",
+                            "N"
+                        )
+                    ).upper()
+
+                    if etf == "Y":
+                        continue
+
+                    if (
+                        symbol.isalpha()
+                        and len(symbol) <= 5
+                    ):
+
+                        symbols.add(symbol)
+
+    except Exception:
+        pass
+
+
+    # -----------------------------------------------------
+    # OTHER US EXCHANGE LISTED
+    # -----------------------------------------------------
+
+    try:
+
+        url = (
+            "https://www.nasdaqtrader.com/"
+            "dynamic/SymDir/otherlisted.txt"
+        )
+
+        response = requests.get(
+            url,
+            timeout=20
+        )
+
+        if response.status_code == 200:
+
+            text = response.text
+
+            df = pd.read_csv(
+                io.StringIO(text),
+                sep="|"
+            )
+
+            if "ACT Symbol" in df.columns:
+
+                for _, row in df.iterrows():
+
+                    symbol = str(
+                        row["ACT Symbol"]
+                    ).strip().upper()
+
+                    if not symbol:
+                        continue
+
+                    if symbol == "FILE CREATION TIME":
+                        continue
+
+                    # Exclude ETFs
+                    etf = str(
+                        row.get(
+                            "ETF",
+                            "N"
+                        )
+                    ).upper()
+
+                    if etf == "Y":
+                        continue
+
+                    if (
+                        symbol.isalpha()
+                        and len(symbol) <= 5
+                    ):
+
+                        symbols.add(symbol)
+
+    except Exception:
+        pass
+
+
+    # -----------------------------------------------------
+    # SORT
+    # -----------------------------------------------------
+
+    symbols = sorted(
+        list(symbols)
+    )
+
+
+    return symbols
+
+
+# =========================================================
+# LOAD UNIVERSE
+# =========================================================
+
+try:
+
+    universe = download_us_stock_universe()
+
+    if universe:
+
+        st.session_state.stock_universe = (
+            universe
+        )
+
+        st.session_state.universe_loaded = True
+
+except Exception:
+
+    pass
+
+
+# =========================================================
+# FALLBACK
+# =========================================================
+
+if not st.session_state.stock_universe:
+
+    st.session_state.stock_universe = [
+
+        "AAPL",
+        "MSFT",
+        "NVDA",
+        "AMZN",
+        "META",
+        "GOOGL",
+        "GOOG",
+        "TSLA",
+        "AVGO",
+        "AMD",
+        "NFLX",
+        "INTC",
+        "MU",
+        "QCOM",
+        "AMAT",
+        "ARM",
+        "PLTR",
+        "SMCI",
+        "COIN",
+        "HOOD",
+        "SOFI",
+        "BAC",
+        "JPM",
+        "WMT",
+        "COST",
+        "UBER",
+        "SHOP",
+        "PDD",
+        "NIO",
+        "RIVN"
+
+    ]
 
 
 # =========================================================
@@ -296,7 +496,8 @@ TRADINGVIEW_EXCHANGE = {
     "JPM": "NYSE",
     "WMT": "NYSE",
     "UBER": "NYSE",
-    "NIO": "NYSE"
+    "NIO": "NYSE",
+    "RIVN": "NASDAQ"
 
 }
 
@@ -343,7 +544,7 @@ def market_is_open():
 
 
 # =========================================================
-# GET SNAPSHOT
+# SNAPSHOT
 # =========================================================
 
 def get_snapshot(symbol):
@@ -396,23 +597,27 @@ def parse_snapshot(
         if data is None:
             return None
 
+
         if isinstance(
             data,
             dict
         ):
 
             if "data" in data:
+
                 data = data["data"]
+
 
             if isinstance(
                 data,
                 list
             ):
 
-                if len(data) == 0:
+                if not data:
                     return None
 
                 data = data[0]
+
 
         if not isinstance(
             data,
@@ -502,22 +707,35 @@ def parse_snapshot(
         # -------------------------------------------------
 
         try:
-            price = float(price)
+
+            price = float(
+                price
+            )
+
         except Exception:
+
             price = 0
 
 
         try:
-            volume = float(volume)
+
+            volume = float(
+                volume
+            )
+
         except Exception:
+
             volume = 0
 
 
         try:
+
             change_ratio = float(
                 change_ratio
             )
+
         except Exception:
+
             change_ratio = 0
 
 
@@ -525,7 +743,9 @@ def parse_snapshot(
         # CHANGE %
         # -------------------------------------------------
 
-        if abs(change_ratio) < 1:
+        if abs(
+            change_ratio
+        ) < 1:
 
             change_percent = (
                 change_ratio * 100
@@ -641,6 +861,7 @@ def check_repeat_volume(
         ):
 
             repeat = True
+
             break
 
 
@@ -663,7 +884,7 @@ def check_repeat_volume(
 
 
 # =========================================================
-# RECORD TRIGGER TIME
+# TRIGGER TIME
 # =========================================================
 
 def record_trigger_time(
@@ -682,24 +903,47 @@ def record_trigger_time(
     )
 
 
-    # Only create a new time when
-    # stock was NOT already active
-
-    if symbol not in st.session_state.active_symbols:
+    if symbol not in (
+        st.session_state.active_symbols
+    ):
 
         st.session_state.trigger_times[
             symbol
         ] = time_string
 
 
-    return st.session_state.trigger_times.get(
-        symbol,
-        time_string
+    return (
+        st.session_state
+        .trigger_times
+        .get(
+            symbol,
+            time_string
+        )
     )
 
 
 # =========================================================
-# SCAN STOCKS
+# SCAN ONE SYMBOL
+# =========================================================
+
+def scan_one_symbol(
+    symbol
+):
+
+    data = get_snapshot(
+        symbol
+    )
+
+    parsed = parse_snapshot(
+        symbol,
+        data
+    )
+
+    return parsed
+
+
+# =========================================================
+# SCAN STOCK UNIVERSE
 # =========================================================
 
 def scan_stocks():
@@ -708,58 +952,73 @@ def scan_stocks():
 
     results = []
 
-    previous_volumes = (
-        st.session_state
-        .previous_volumes
-        .copy()
-    )
-
     current_active_symbols = set()
 
 
-    # =====================================================
-    # PARALLEL WEBULL REQUESTS
-    # =====================================================
+    # -----------------------------------------------------
+    # UNIVERSE
+    # -----------------------------------------------------
 
-    with ThreadPoolExecutor(
-        max_workers=MAX_WORKERS
-    ) as executor:
+    universe = (
+        st.session_state.stock_universe
+    )
 
-        futures = {
 
-            executor.submit(
-                get_snapshot,
+    universe_limit = int(
+        settings[
+            "universe_limit"
+        ]
+    )
+
+
+    if universe_limit > 0:
+
+        universe = universe[
+            :universe_limit
+        ]
+
+
+    # -----------------------------------------------------
+    # BATCH
+    # -----------------------------------------------------
+
+    batch_size = int(
+        settings[
+            "batch_size"
+        ]
+    )
+
+
+    # -----------------------------------------------------
+    # NOTE
+    # -----------------------------------------------------
+    # We keep the existing working
+    # single-symbol Webull call here.
+    #
+    # This makes the first full-market
+    # version safer.
+    #
+    # Once confirmed working, we can
+    # replace this with Webull's official
+    # multi-symbol snapshot call.
+    # -----------------------------------------------------
+
+    for start in range(
+        0,
+        len(universe),
+        batch_size
+    ):
+
+        batch = universe[
+            start:
+            start + batch_size
+        ]
+
+
+        for symbol in batch:
+
+            parsed = scan_one_symbol(
                 symbol
-            ): symbol
-
-            for symbol in STOCKS
-
-        }
-
-
-        for future in as_completed(
-            futures
-        ):
-
-            symbol = (
-                futures[future]
-            )
-
-
-            try:
-
-                data = (
-                    future.result()
-                )
-
-            except Exception:
-
-                data = None
-
-
-            parsed = parse_snapshot(
-                symbol,
-                data
             )
 
 
@@ -785,11 +1044,13 @@ def scan_stocks():
 
 
             # -------------------------------------------------
-            # RVOL
+            # PREVIOUS VOLUME
             # -------------------------------------------------
 
             previous_volume = (
-                previous_volumes.get(
+                st.session_state
+                .previous_volumes
+                .get(
                     symbol,
                     0
                 )
@@ -809,7 +1070,7 @@ def scan_stocks():
 
 
             # -------------------------------------------------
-            # REPEAT
+            # REPEAT VOLUME
             # -------------------------------------------------
 
             repeat = (
@@ -821,7 +1082,7 @@ def scan_stocks():
 
 
             # -------------------------------------------------
-            # SAVE VOLUME
+            # SAVE CURRENT VOLUME
             # -------------------------------------------------
 
             st.session_state.previous_volumes[
@@ -836,41 +1097,47 @@ def scan_stocks():
             if price < settings[
                 "min_price"
             ]:
+
                 continue
 
 
             if price > settings[
                 "max_price"
             ]:
+
                 continue
 
 
             if volume < settings[
                 "min_volume"
             ]:
+
                 continue
 
 
             if rvol < settings[
                 "min_rvol"
             ]:
+
                 continue
 
 
             if change_percent < settings[
                 "min_change"
             ]:
+
                 continue
 
 
             if dollar_volume < settings[
                 "min_dollar_volume"
             ]:
+
                 continue
 
 
             # =================================================
-            # STOCK PASSED FILTERS
+            # PASSED
             # =================================================
 
             current_active_symbols.add(
@@ -887,22 +1154,29 @@ def scan_stocks():
 
             results.append({
 
-                "Time": trigger_time,
+                "Time":
+                    trigger_time,
 
-                "Symbol": symbol,
+                "Symbol":
+                    symbol,
 
-                "Price": price,
+                "Price":
+                    price,
 
-                "Change": change_percent,
+                "Change":
+                    change_percent,
 
-                "Volume": volume,
+                "Volume":
+                    volume,
 
-                "RVOL": rvol,
+                "RVOL":
+                    rvol,
 
                 "Dollar Volume":
                     dollar_volume,
 
-                "Repeat": repeat
+                "Repeat":
+                    repeat
 
             })
 
@@ -918,17 +1192,21 @@ def scan_stocks():
 
     disappeared = (
         old_active_symbols
-        - current_active_symbols
+        -
+        current_active_symbols
     )
 
 
     for symbol in disappeared:
 
-        if symbol in st.session_state.trigger_times:
+        if symbol in (
+            st.session_state.trigger_times
+        ):
 
-            del st.session_state.trigger_times[
-                symbol
-            ]
+            del (
+                st.session_state
+                .trigger_times[symbol]
+            )
 
 
     st.session_state.active_symbols = (
@@ -971,19 +1249,12 @@ def scan_stocks():
             columns=[
 
                 "Time",
-
                 "Symbol",
-
                 "Price",
-
                 "Change",
-
                 "Volume",
-
                 "RVOL",
-
                 "Dollar Volume",
-
                 "Repeat"
 
             ]
@@ -992,25 +1263,19 @@ def scan_stocks():
 
 
     # =====================================================
-    # SCAN INFORMATION
+    # SAVE
     # =====================================================
 
     end_time = datetime.now()
 
 
-    duration = (
+    st.session_state.scan_duration = (
+
         end_time - start_time
     ).total_seconds()
 
 
-    st.session_state.scan_duration = (
-        duration
-    )
-
-
-    st.session_state.scan_results = (
-        df
-    )
+    st.session_state.scan_results = df
 
 
     st.session_state.scan_count += 1
@@ -1035,6 +1300,68 @@ with st.sidebar:
 
     st.header(
         "Scanner Filters"
+    )
+
+
+    # =====================================================
+    # MARKET UNIVERSE
+    # =====================================================
+
+    st.subheader(
+        "US Market"
+    )
+
+
+    universe_count = len(
+        st.session_state.stock_universe
+    )
+
+
+    st.caption(
+        f"US stocks loaded: "
+        f"{universe_count:,}"
+    )
+
+
+    settings[
+        "universe_limit"
+    ] = st.number_input(
+
+        "Stocks to scan",
+
+        min_value=30,
+
+        max_value=10000,
+
+        value=int(
+            settings[
+                "universe_limit"
+            ]
+        ),
+
+        step=100
+
+    )
+
+
+    settings[
+        "batch_size"
+    ] = st.number_input(
+
+        "Batch size",
+
+        min_value=1,
+
+        max_value=100,
+
+        value=int(
+            settings[
+                "batch_size"
+            ]
+        ),
+
+        step=1
+
     )
 
 
@@ -1180,7 +1507,7 @@ with st.sidebar:
 
 
     # =====================================================
-    # REPEAT VOLUME
+    # REPEAT
     # =====================================================
 
     st.subheader(
@@ -1224,7 +1551,7 @@ with st.sidebar:
 
         "Refresh Seconds",
 
-        min_value=5,
+        min_value=30,
 
         max_value=3600,
 
@@ -1234,7 +1561,7 @@ with st.sidebar:
             ]
         ),
 
-        step=5
+        step=30
 
     )
 
@@ -1347,6 +1674,32 @@ with st.sidebar:
         )
 
 
+    # =====================================================
+    # REFRESH UNIVERSE
+    # =====================================================
+
+    if st.button(
+        "🔄 Refresh US Stock List",
+        use_container_width=True
+    ):
+
+        download_us_stock_universe.clear()
+
+        new_universe = (
+            download_us_stock_universe()
+        )
+
+        st.session_state.stock_universe = (
+            new_universe
+        )
+
+        st.success(
+            f"Loaded {len(new_universe):,} stocks"
+        )
+
+        st.rerun()
+
+
 # =========================================================
 # MAIN HEADER
 # =========================================================
@@ -1391,15 +1744,23 @@ with header_col3:
 
 
 # =========================================================
-# SCAN INFORMATION
+# MARKET INFORMATION
 # =========================================================
 
-info_col1, info_col2, info_col3 = st.columns(
-    3
+info_col1, info_col2, info_col3, info_col4 = st.columns(
+    4
 )
 
 
 with info_col1:
+
+    st.caption(
+        f"US stocks: "
+        f"{len(st.session_state.stock_universe):,}"
+    )
+
+
+with info_col2:
 
     st.caption(
         f"Scans: "
@@ -1407,7 +1768,7 @@ with info_col1:
     )
 
 
-with info_col2:
+with info_col3:
 
     if st.session_state.last_scan_time:
 
@@ -1422,14 +1783,14 @@ with info_col2:
         )
 
 
-with info_col3:
+with info_col4:
 
     if st.session_state.scan_duration:
 
         st.caption(
 
-            "Scan speed: "
-            f"{st.session_state.scan_duration:.2f}s"
+            "Scan time: "
+            f"{st.session_state.scan_duration:.1f}s"
 
         )
 
@@ -1452,7 +1813,7 @@ if (
 
 
 # =========================================================
-# SCANNER AREA
+# SCANNER
 # =========================================================
 
 @st.fragment(
@@ -1485,7 +1846,7 @@ def scanner_area():
 
 
     # =====================================================
-    # 35 / 65 LAYOUT
+    # 35 / 65
     # =====================================================
 
     left, right = st.columns(
@@ -1498,7 +1859,7 @@ def scanner_area():
 
 
     # =====================================================
-    # LEFT SCANNER
+    # LEFT
     # =====================================================
 
     with left:
@@ -1514,10 +1875,9 @@ def scanner_area():
         )
 
 
-        # =================================================
+        # -------------------------------------------------
         # HEADER
-        # TIME FIRST
-        # =================================================
+        # -------------------------------------------------
 
         h1, h2, h3, h4, h5, h6 = st.columns(
 
@@ -1533,86 +1893,37 @@ def scanner_area():
         )
 
 
-        with h1:
+        headers = [
 
-            st.markdown(
+            ("TIME", h1),
+            ("SYMBOL", h2),
+            ("LTP", h3),
+            ("%", h4),
+            ("RVOL", h5),
+            ("$VOL", h6)
 
-                '<div class="scanner-heading">'
-                'TIME'
-                '</div>',
-
-                unsafe_allow_html=True
-
-            )
-
-
-        with h2:
-
-            st.markdown(
-
-                '<div class="scanner-heading">'
-                'SYMBOL'
-                '</div>',
-
-                unsafe_allow_html=True
-
-            )
+        ]
 
 
-        with h3:
+        for text, column in headers:
 
-            st.markdown(
+            with column:
 
-                '<div class="scanner-heading">'
-                'LTP'
-                '</div>',
+                st.markdown(
 
-                unsafe_allow_html=True
+                    f"""
+                    <div class="scanner-heading">
+                        {text}
+                    </div>
+                    """,
 
-            )
+                    unsafe_allow_html=True
 
-
-        with h4:
-
-            st.markdown(
-
-                '<div class="scanner-heading">'
-                '%'
-                '</div>',
-
-                unsafe_allow_html=True
-
-            )
-
-
-        with h5:
-
-            st.markdown(
-
-                '<div class="scanner-heading">'
-                'RVOL'
-                '</div>',
-
-                unsafe_allow_html=True
-
-            )
-
-
-        with h6:
-
-            st.markdown(
-
-                '<div class="scanner-heading">'
-                '$VOL'
-                '</div>',
-
-                unsafe_allow_html=True
-
-            )
+                )
 
 
         # =================================================
-        # NO RESULTS
+        # RESULTS
         # =================================================
 
         if df.empty:
@@ -1621,10 +1932,6 @@ def scanner_area():
                 "No stocks match the filters."
             )
 
-
-        # =================================================
-        # STOCK ROWS
-        # =================================================
 
         else:
 
@@ -1640,10 +1947,6 @@ def scanner_area():
                 ]
 
 
-                # -----------------------------------------
-                # SIX COLUMNS
-                # -----------------------------------------
-
                 c1, c2, c3, c4, c5, c6 = st.columns(
 
                     [
@@ -1658,9 +1961,7 @@ def scanner_area():
                 )
 
 
-                # -----------------------------------------
                 # TIME
-                # -----------------------------------------
 
                 with c1:
 
@@ -1677,9 +1978,7 @@ def scanner_area():
                     )
 
 
-                # -----------------------------------------
                 # SYMBOL
-                # -----------------------------------------
 
                 with c2:
 
@@ -1707,9 +2006,7 @@ def scanner_area():
                         st.rerun()
 
 
-                # -----------------------------------------
                 # LTP
-                # -----------------------------------------
 
                 with c3:
 
@@ -1726,9 +2023,7 @@ def scanner_area():
                     )
 
 
-                # -----------------------------------------
-                # CHANGE
-                # -----------------------------------------
+                # %
 
                 with c4:
 
@@ -1745,9 +2040,7 @@ def scanner_area():
                     )
 
 
-                # -----------------------------------------
                 # RVOL
-                # -----------------------------------------
 
                 with c5:
 
@@ -1764,9 +2057,7 @@ def scanner_area():
                     )
 
 
-                # -----------------------------------------
-                # DOLLAR VOLUME
-                # -----------------------------------------
+                # $VOL
 
                 with c6:
 
@@ -1838,10 +2129,6 @@ def scanner_area():
         )
 
 
-        # =================================================
-        # TRADINGVIEW
-        # =================================================
-
         tv_url = (
 
             "https://www.tradingview.com/widgetembed/"
@@ -1877,19 +2164,12 @@ def scanner_area():
 
             f"""
             <iframe
-
                 src="{tv_url}"
-
                 width="100%"
-
                 height="600"
-
                 frameborder="0"
-
                 allowtransparency="true"
-
                 scrolling="no">
-
             </iframe>
             """,
 
@@ -1899,7 +2179,7 @@ def scanner_area():
 
 
 # =========================================================
-# RUN SCANNER
+# RUN
 # =========================================================
 
 scanner_area()
@@ -1912,7 +2192,7 @@ scanner_area()
 st.caption(
 
     "Webull US Momentum Scanner • "
-    "Parallel API scanning • "
+    "Dynamic US stock universe • "
     "Historical volume repeat detection"
 
 )
