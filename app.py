@@ -12,7 +12,7 @@ from webull.data.data_client import DataClient
 
 
 # ============================================================
-# PAGE CONFIGURATION
+# PAGE
 # ============================================================
 
 st.set_page_config(
@@ -29,10 +29,6 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-
-/* =========================================================
-   GENERAL
-   ========================================================= */
 
 .block-container {
     padding-top: 0.45rem !important;
@@ -55,11 +51,6 @@ div[data-testid="column"] {
     padding-right: 3px;
 }
 
-
-/* =========================================================
-   TOP HEADER
-   ========================================================= */
-
 .top-title {
     font-size: 22px;
     font-weight: 700;
@@ -73,18 +64,6 @@ div[data-testid="column"] {
     margin-top: -2px;
 }
 
-
-/* =========================================================
-   SCANNER
-   ========================================================= */
-
-.scanner-panel {
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 7px;
-    overflow: hidden;
-    background: rgba(255,255,255,0.015);
-}
-
 .scanner-title {
     font-size: 13px;
     font-weight: 700;
@@ -96,11 +75,6 @@ div[data-testid="column"] {
     opacity: 0.55;
 }
 
-
-/* =========================================================
-   TABLE HEADER
-   ========================================================= */
-
 .table-header {
     font-size: 9px;
     font-weight: 700;
@@ -109,29 +83,13 @@ div[data-testid="column"] {
     padding-bottom: 3px;
 }
 
-
-/* =========================================================
-   STOCK ROW
-   ========================================================= */
-
-.stock-row {
-    min-height: 32px;
-    border-top: 1px solid rgba(255,255,255,0.045);
-}
-
-.stock-symbol {
-    font-size: 12px;
-    font-weight: 700;
-    line-height: 31px;
-    white-space: nowrap;
-}
-
 .stock-name {
     font-size: 9px;
-    opacity: 0.45;
+    opacity: 0.55;
     line-height: 31px;
     white-space: nowrap;
     overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .stock-number {
@@ -140,17 +98,6 @@ div[data-testid="column"] {
     white-space: nowrap;
 }
 
-.stock-repeat {
-    font-size: 10px;
-    font-weight: 800;
-    line-height: 31px;
-}
-
-
-/* =========================================================
-   BUTTONS
-   ========================================================= */
-
 .stButton > button {
     min-height: 29px !important;
     height: 29px !important;
@@ -158,11 +105,6 @@ div[data-testid="column"] {
     border-radius: 4px !important;
     font-size: 11px !important;
 }
-
-
-/* =========================================================
-   CHART
-   ========================================================= */
 
 .chart-title {
     font-size: 14px;
@@ -174,22 +116,6 @@ div[data-testid="column"] {
     font-size: 10px;
     opacity: 0.5;
 }
-
-
-/* =========================================================
-   FOOTER
-   ========================================================= */
-
-.footer {
-    font-size: 9px;
-    opacity: 0.4;
-    margin-top: 2px;
-}
-
-
-/* =========================================================
-   SIDEBAR
-   ========================================================= */
 
 section[data-testid="stSidebar"] {
     width: 285px !important;
@@ -248,9 +174,7 @@ try:
 except Exception as e:
 
     st.error("Could not connect to Webull.")
-
     st.code(str(e))
-
     st.stop()
 
 
@@ -259,7 +183,6 @@ except Exception as e:
 # ============================================================
 
 STOCKS = [
-
     "AAPL",
     "MSFT",
     "NVDA",
@@ -290,7 +213,6 @@ STOCKS = [
     "PDD",
     "NIO",
     "RIVN"
-
 ]
 
 
@@ -305,32 +227,26 @@ COMPANY_NAMES = {
     "NVDA": "NVIDIA",
     "AMZN": "Amazon",
     "META": "Meta",
-
     "GOOGL": "Alphabet",
     "GOOG": "Alphabet",
-
     "TSLA": "Tesla",
     "AVGO": "Broadcom",
     "AMD": "Advanced Micro Devices",
-
     "NFLX": "Netflix",
     "INTC": "Intel",
     "MU": "Micron",
     "QCOM": "Qualcomm",
     "AMAT": "Applied Materials",
-
     "ARM": "Arm Holdings",
     "PLTR": "Palantir",
     "SMCI": "Super Micro Computer",
     "COIN": "Coinbase",
     "HOOD": "Robinhood",
-
     "SOFI": "SoFi Technologies",
     "BAC": "Bank of America",
     "JPM": "JPMorgan Chase",
     "WMT": "Walmart",
     "COST": "Costco",
-
     "UBER": "Uber",
     "SHOP": "Shopify",
     "PDD": "PDD Holdings",
@@ -380,10 +296,6 @@ EXCHANGE_MAP = {
 }
 
 
-# ============================================================
-# TRADINGVIEW SYMBOL
-# ============================================================
-
 def tradingview_symbol(symbol):
 
     exchange = EXCHANGE_MAP.get(
@@ -416,7 +328,6 @@ DEFAULT_SETTINGS = {
 
     "history_length": 20,
 
-    # ALWAYS 60 SECONDS
     "refresh_seconds": 60,
 
     "auto_refresh": True,
@@ -436,7 +347,7 @@ SETTINGS_FILE = "scanner_settings.json"
 
 
 # ============================================================
-# SETTINGS FUNCTIONS
+# SETTINGS
 # ============================================================
 
 def load_settings():
@@ -458,7 +369,7 @@ def load_settings():
 
         result.update(saved)
 
-        # Force scanner to 60 seconds
+        # Always keep scanner at 60 seconds
         result["refresh_seconds"] = 60
 
         return result
@@ -543,9 +454,7 @@ NY = ZoneInfo(
 
 def current_ny_time():
 
-    return datetime.now(
-        NY
-    )
+    return datetime.now(NY)
 
 
 def market_is_open():
@@ -569,7 +478,7 @@ def market_is_open():
 
 
 # ============================================================
-# WEBULL SNAPSHOT
+# GET WEBULL SNAPSHOT
 # ============================================================
 
 def get_snapshot(symbol):
@@ -580,10 +489,6 @@ def get_snapshot(symbol):
             symbol,
             "US_STOCK"
         )
-
-        # IMPORTANT:
-        # Webull returns a response object.
-        # We must check status_code and then JSON.
 
         if response.status_code != 200:
 
@@ -607,20 +512,18 @@ def get_snapshot(symbol):
 
 
 # ============================================================
-# PARALLEL SNAPSHOTS
+# GET ALL SNAPSHOTS
 # ============================================================
 
 def get_all_snapshots():
 
     snapshots = {}
 
-    # 5 workers keeps API load reasonable
-    # while still making the scan faster.
-
-    max_workers = 5
+    # 5 simultaneous requests
+    # helps the 30-stock scan finish faster
 
     with ThreadPoolExecutor(
-        max_workers=max_workers
+        max_workers=5
     ) as executor:
 
         futures = {
@@ -654,7 +557,7 @@ def get_all_snapshots():
 
 
 # ============================================================
-# VOLUME HISTORY
+# ADD VOLUME
 # ============================================================
 
 def add_volume(
@@ -672,9 +575,7 @@ def add_volume(
     )
 
 
-    history.append(
-        volume
-    )
+    history.append(volume)
 
 
     maximum = int(
@@ -690,7 +591,7 @@ def add_volume(
 
 
 # ============================================================
-# REPEAT VOLUME
+# DETECT REPEAT VOLUME
 # ============================================================
 
 def detect_repeat(
@@ -706,10 +607,7 @@ def detect_repeat(
     )
 
 
-    # --------------------------------------------
-    # FIRST TIME
-    # --------------------------------------------
-
+    # First time seen
     if not history:
 
         add_volume(
@@ -724,10 +622,6 @@ def detect_repeat(
         settings["repeat_tolerance"]
     )
 
-
-    # --------------------------------------------
-    # CHECK OLD VOLUMES
-    # --------------------------------------------
 
     for old_volume in history:
 
@@ -760,10 +654,6 @@ def detect_repeat(
             return True
 
 
-    # --------------------------------------------
-    # NO REPEAT
-    # --------------------------------------------
-
     add_volume(
         symbol,
         volume
@@ -788,10 +678,11 @@ def calculate_rvol(
     )
 
 
-    if (
-        previous is None
-        or previous <= 0
-    ):
+    if previous is None:
+
+        rvol = 1.0
+
+    elif previous <= 0:
 
         rvol = 1.0
 
@@ -812,7 +703,7 @@ def calculate_rvol(
 
 
 # ============================================================
-# FORMAT MONEY
+# MONEY FORMAT
 # ============================================================
 
 def money(value):
@@ -851,45 +742,6 @@ def money(value):
 
 
 # ============================================================
-# VOLUME FORMAT
-# ============================================================
-
-def volume_text(value):
-
-    try:
-
-        value = float(value)
-
-    except Exception:
-
-        return "-"
-
-
-    if value >= 1_000_000_000:
-
-        return (
-            f"{value / 1_000_000_000:.1f}B"
-        )
-
-
-    if value >= 1_000_000:
-
-        return (
-            f"{value / 1_000_000:.1f}M"
-        )
-
-
-    if value >= 1_000:
-
-        return (
-            f"{value / 1_000:.0f}K"
-        )
-
-
-    return f"{value:.0f}"
-
-
-# ============================================================
 # SCAN MARKET
 # ============================================================
 
@@ -898,13 +750,16 @@ def scan_market():
     rows = []
 
 
-    # Get all Webull snapshots
+    # --------------------------------------------------------
+    # Get Webull data
+    # --------------------------------------------------------
+
     snapshots = get_all_snapshots()
 
 
-    # ========================================================
-    # PROCESS EACH STOCK
-    # ========================================================
+    # --------------------------------------------------------
+    # Process stocks
+    # --------------------------------------------------------
 
     for symbol in STOCKS:
 
@@ -920,10 +775,6 @@ def scan_market():
 
         try:
 
-            # ------------------------------------------------
-            # PRICE
-            # ------------------------------------------------
-
             price = float(
                 data.get(
                     "price",
@@ -933,13 +784,18 @@ def scan_market():
             )
 
 
-            # ------------------------------------------------
-            # CHANGE
-            # ------------------------------------------------
-
             change_ratio = float(
                 data.get(
                     "change_ratio",
+                    0
+                )
+                or 0
+            )
+
+
+            volume = float(
+                data.get(
+                    "volume",
                     0
                 )
                 or 0
@@ -952,32 +808,11 @@ def scan_market():
             )
 
 
-            # ------------------------------------------------
-            # VOLUME
-            # ------------------------------------------------
-
-            volume = float(
-                data.get(
-                    "volume",
-                    0
-                )
-                or 0
-            )
-
-
-            # ------------------------------------------------
-            # DOLLAR VOLUME
-            # ------------------------------------------------
-
             dollar_volume = (
                 price
                 * volume
             )
 
-
-            # ------------------------------------------------
-            # RVOL
-            # ------------------------------------------------
 
             rvol = calculate_rvol(
                 symbol,
@@ -985,23 +820,19 @@ def scan_market():
             )
 
 
-            # ------------------------------------------------
-            # REPEAT VOLUME
-            # ------------------------------------------------
-
             repeat = detect_repeat(
                 symbol,
                 volume
             )
 
 
-            # =================================================
+            # ------------------------------------------------
             # FILTERS
-            # =================================================
+            # ------------------------------------------------
 
             if (
                 price
-                < float(settings["min_price"])
+                < settings["min_price"]
             ):
 
                 continue
@@ -1009,7 +840,7 @@ def scan_market():
 
             if (
                 price
-                > float(settings["max_price"])
+                > settings["max_price"]
             ):
 
                 continue
@@ -1017,7 +848,7 @@ def scan_market():
 
             if (
                 volume
-                < int(settings["min_volume"])
+                < settings["min_volume"]
             ):
 
                 continue
@@ -1025,7 +856,7 @@ def scan_market():
 
             if (
                 change
-                < float(settings["min_change"])
+                < settings["min_change"]
             ):
 
                 continue
@@ -1033,7 +864,7 @@ def scan_market():
 
             if (
                 rvol
-                < float(settings["min_rvol"])
+                < settings["min_rvol"]
             ):
 
                 continue
@@ -1041,15 +872,15 @@ def scan_market():
 
             if (
                 dollar_volume
-                < float(settings["min_dollar_volume"])
+                < settings["min_dollar_volume"]
             ):
 
                 continue
 
 
-            # =================================================
-            # ADD STOCK
-            # =================================================
+            # ------------------------------------------------
+            # ADD RESULT
+            # ------------------------------------------------
 
             rows.append({
 
@@ -1088,27 +919,27 @@ def scan_market():
             continue
 
 
-    # ========================================================
-    # NO RESULTS
-    # ========================================================
+    # --------------------------------------------------------
+    # No results
+    # --------------------------------------------------------
 
     if not rows:
 
         return pd.DataFrame()
 
 
-    # ========================================================
-    # DATAFRAME
-    # ========================================================
+    # --------------------------------------------------------
+    # DataFrame
+    # --------------------------------------------------------
 
     df = pd.DataFrame(
         rows
     )
 
 
-    # ========================================================
-    # SORT
-    # ========================================================
+    # --------------------------------------------------------
+    # Sort
+    # --------------------------------------------------------
 
     df = df.sort_values(
 
@@ -1167,9 +998,9 @@ with st.sidebar:
     )
 
 
-    # ========================================================
+    # --------------------------------------------------------
     # PRICE
-    # ========================================================
+    # --------------------------------------------------------
 
     st.markdown(
         "### Price"
@@ -1206,9 +1037,9 @@ with st.sidebar:
     )
 
 
-    # ========================================================
+    # --------------------------------------------------------
     # MOMENTUM
-    # ========================================================
+    # --------------------------------------------------------
 
     st.markdown(
         "### Momentum"
@@ -1243,9 +1074,9 @@ with st.sidebar:
     )
 
 
-    # ========================================================
+    # --------------------------------------------------------
     # VOLUME
-    # ========================================================
+    # --------------------------------------------------------
 
     st.markdown(
         "### Volume"
@@ -1316,17 +1147,13 @@ with st.sidebar:
     )
 
 
-    # ========================================================
+    # --------------------------------------------------------
     # REFRESH
-    # ========================================================
+    # --------------------------------------------------------
 
     st.markdown(
         "### Refresh"
     )
-
-
-    # Fixed at 60 seconds
-    settings["refresh_seconds"] = 60
 
 
     settings["auto_refresh"] = st.checkbox(
@@ -1340,61 +1167,81 @@ with st.sidebar:
     )
 
 
+    # FIXED 60 SECOND SCAN
+    settings["refresh_seconds"] = 60
+
+
     st.caption(
-        "Scanner automatically checks every 60 seconds."
+        "Scanner interval: 60 seconds"
     )
 
 
-    # ========================================================
+    # --------------------------------------------------------
     # TRADINGVIEW
-    # ========================================================
+    # --------------------------------------------------------
 
     st.markdown(
         "### TradingView"
     )
 
 
+    intervals = [
+        "1",
+        "5",
+        "15",
+        "30",
+        "60",
+        "D"
+    ]
+
+
+    current_interval = (
+        settings["interval"]
+    )
+
+
+    if current_interval not in intervals:
+
+        current_interval = "1"
+
+
     settings["interval"] = st.selectbox(
 
         "Chart timeframe",
 
-        [
-            "1",
-            "5",
-            "15",
-            "30",
-            "60",
-            "D"
-        ],
+        intervals,
 
-        index=[
-            "1",
-            "5",
-            "15",
-            "30",
-            "60",
-            "D"
-        ].index(
-            settings["interval"]
+        index=intervals.index(
+            current_interval
         )
 
     )
+
+
+    themes = [
+        "dark",
+        "light"
+    ]
+
+
+    current_theme = (
+        settings["theme"]
+    )
+
+
+    if current_theme not in themes:
+
+        current_theme = "dark"
 
 
     settings["theme"] = st.selectbox(
 
         "Chart theme",
 
-        [
-            "dark",
-            "light"
-        ],
+        themes,
 
-        index=[
-            "dark",
-            "light"
-        ].index(
-            settings["theme"]
+        index=themes.index(
+            current_theme
         )
 
     )
@@ -1411,9 +1258,9 @@ with st.sidebar:
     )
 
 
-    # ========================================================
-    # SAVE SETTINGS
-    # ========================================================
+    # --------------------------------------------------------
+    # SAVE
+    # --------------------------------------------------------
 
     st.divider()
 
@@ -1429,6 +1276,10 @@ with st.sidebar:
                 "Settings saved."
             )
 
+
+    # --------------------------------------------------------
+    # RESET
+    # --------------------------------------------------------
 
     if st.button(
         "Reset settings",
@@ -1455,9 +1306,6 @@ if st.session_state.results.empty:
     perform_scan()
 
 
-df = st.session_state.results
-
-
 # ============================================================
 # TOP HEADER
 # ============================================================
@@ -1470,19 +1318,25 @@ top1, top2, top3 = st.columns(
 with top1:
 
     st.markdown(
+
         '<div class="top-title">'
         'US Momentum Scanner'
         '</div>',
+
         unsafe_allow_html=True
+
     )
 
 
     st.markdown(
+
         '<div class="top-subtitle">'
         'Webull market data • Volume momentum • '
-        'Repeat-volume tracking • 60-second scanning'
+        'Repeat-volume tracking'
         '</div>',
+
         unsafe_allow_html=True
+
     )
 
 
@@ -1514,7 +1368,7 @@ with top3:
 
 
 # ============================================================
-# MAIN 35 / 65 LAYOUT
+# MAIN 35 / 65
 # ============================================================
 
 left, right = st.columns(
@@ -1524,16 +1378,10 @@ left, right = st.columns(
 
 
 # ============================================================
-# LEFT — LIVE SCANNER
+# LEFT — SCANNER
 # ============================================================
 
 with left:
-
-    # --------------------------------------------------------
-    # FRAGMENT
-    #
-    # ONLY THIS SECTION REFRESHES EVERY 60 SECONDS.
-    # --------------------------------------------------------
 
     @st.fragment(
         run_every=(
@@ -1544,14 +1392,11 @@ with left:
     )
     def live_scanner():
 
-        # ----------------------------------------------------
-        # Automatic scan
-        # ----------------------------------------------------
-
+        # Automatic scan every 60 seconds
         perform_scan()
 
 
-        current_df = (
+        df = (
             st.session_state.results
         )
 
@@ -1565,26 +1410,11 @@ with left:
             '<div class="scanner-title">'
             'Momentum Stocks '
             f'<span class="scanner-count">'
-            f'({len(current_df)})'
+            f'({len(df)})'
             f'</span>'
             '</div>',
 
             unsafe_allow_html=True
-
-        )
-
-
-        # ----------------------------------------------------
-        # STATUS
-        # ----------------------------------------------------
-
-        st.caption(
-
-            f"Scan #{st.session_state.scan_number}"
-            f"  •  "
-            f"Last scan {st.session_state.last_scan}"
-            f"  •  "
-            f"Next scan in 60 seconds"
 
         )
 
@@ -1671,7 +1501,7 @@ with left:
         # NO STOCKS
         # ----------------------------------------------------
 
-        if current_df.empty:
+        if df.empty:
 
             st.info(
                 "No stocks match the current filters."
@@ -1679,12 +1509,12 @@ with left:
 
 
         # ----------------------------------------------------
-        # STOCK ROWS
+        # STOCK LIST
         # ----------------------------------------------------
 
         else:
 
-            for _, row in current_df.iterrows():
+            for _, row in df.iterrows():
 
                 symbol = row["Symbol"]
 
@@ -1746,8 +1576,7 @@ with left:
 
                         f"""
                         <div class="stock-name">
-                        {repeat_mark}
-                        {row["Name"]}
+                        {repeat_mark}{row["Name"]}
                         </div>
                         """,
 
@@ -1832,7 +1661,7 @@ with left:
                     )
 
 
-    # Run scanner
+    # Start automatic scanner
     live_scanner()
 
 
@@ -1869,7 +1698,7 @@ with right:
 
 
     # --------------------------------------------------------
-    # TRADINGVIEW URL
+    # TRADINGVIEW SETTINGS
     # --------------------------------------------------------
 
     encoded_symbol = (
@@ -1881,8 +1710,7 @@ with right:
 
 
     timezone = (
-        settings["timezone"]
-        .replace(
+        settings["timezone"].replace(
             "/",
             "%2F"
         )
@@ -1934,7 +1762,7 @@ with right:
 
 
     # --------------------------------------------------------
-    # TRADINGVIEW
+    # CHART
     # --------------------------------------------------------
 
     chart_html = f"""
@@ -1956,15 +1784,10 @@ with right:
         scrolling="no"
 
         style="
-
             border:0;
-
             border-radius:6px;
-
             width:100%;
-
             background:#0b0f14;
-
         "
 
     >
@@ -1983,38 +1806,3 @@ with right:
         scrolling=False
 
     )
-
-
-# ============================================================
-# FOOTER
-# ============================================================
-
-st.markdown(
-
-    f"""
-    <div class="footer">
-
-        Scan #{st.session_state.scan_number}
-
-        &nbsp; • &nbsp;
-
-        Last scan {st.session_state.last_scan}
-
-        &nbsp; • &nbsp;
-
-        Selected {st.session_state.selected_symbol}
-
-        &nbsp; • &nbsp;
-
-        ■ = repeat volume
-
-        &nbsp; • &nbsp;
-
-        Automatic scan: 60 seconds
-
-    </div>
-    """,
-
-    unsafe_allow_html=True
-
-)
