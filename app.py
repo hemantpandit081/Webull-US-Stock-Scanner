@@ -11,10 +11,17 @@ st.set_page_config(
 
 st.title("📈 Webull API Test")
 
-APP_KEY = st.secrets["WEBULL_APP_KEY"]
-APP_SECRET = st.secrets["WEBULL_APP_SECRET"]
+
+# Get API credentials from Streamlit Secrets
+try:
+    APP_KEY = st.secrets["WEBULL_APP_KEY"]
+    APP_SECRET = st.secrets["WEBULL_APP_SECRET"]
+except Exception:
+    st.error("❌ Webull API keys are missing.")
+    st.stop()
 
 
+# Connect to Webull
 try:
     api_client = ApiClient(
         APP_KEY,
@@ -37,6 +44,7 @@ except Exception as e:
     st.stop()
 
 
+# Snapshot test
 st.subheader("Live Snapshot Test")
 
 symbol = st.text_input(
@@ -48,11 +56,9 @@ symbol = st.text_input(
 if st.button("Get Snapshot"):
 
     try:
-
         result = data_client.market_data.get_snapshot(
-    symbol,
-    "US_STOCK"
-)
+            symbol,
+            "US_STOCK"
         )
 
         st.write("Status:", result.status_code)
