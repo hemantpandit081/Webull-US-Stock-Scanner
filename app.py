@@ -1461,7 +1461,7 @@ with right:
         id="tradingview_chart"
         src="{chart_url}"
         width="100%"
-        height="735"
+        height="600"
         frameborder="0"
         allowtransparency="true"
         scrolling="no"
