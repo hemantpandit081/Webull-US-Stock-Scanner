@@ -50,7 +50,9 @@ if st.button("Get Snapshot"):
     try:
 
         result = data_client.market_data.get_snapshot(
-            symbol
+    symbol,
+    "US_STOCK"
+)
         )
 
         st.write("Status:", result.status_code)
