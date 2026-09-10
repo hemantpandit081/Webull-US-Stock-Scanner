@@ -1,5 +1,4 @@
 import streamlit as st
-import inspect
 
 from webull.core.client import ApiClient
 from webull.data.data_client import DataClient
@@ -32,16 +31,37 @@ try:
 
     st.success("✅ Webull API connection created")
 
-    st.subheader("Installed SDK methods")
-
-    methods = [
-        name
-        for name in dir(data_client.market_data)
-        if not name.startswith("_")
-    ]
-
-    st.write(methods)
-
 except Exception as e:
-    st.error("❌ Error")
+    st.error("❌ Connection error")
     st.code(str(e))
+    st.stop()
+
+
+st.subheader("Live Snapshot Test")
+
+symbol = st.text_input(
+    "Stock symbol",
+    "AAPL"
+).upper().strip()
+
+
+if st.button("Get Snapshot"):
+
+    try:
+
+        result = data_client.market_data.get_snapshot(
+            symbol
+        )
+
+        st.write("Status:", result.status_code)
+
+        if result.status_code == 200:
+            st.success("✅ Market data received!")
+            st.json(result.json())
+        else:
+            st.error("❌ Webull returned an error")
+            st.code(result.text)
+
+    except Exception as e:
+        st.error("❌ Snapshot request failed")
+        st.code(str(e))
