@@ -31,11 +31,12 @@ st.markdown("""
 <style>
 
 .block-container {
-    padding-top: 0.45rem !important;
+    padding-top: 0rem !important;
     padding-bottom: 0rem !important;
-    padding-left: 0.45rem !important;
-    padding-right: 0.45rem !important;
+    padding-left: 0.35rem !important;
+    padding-right: 0.35rem !important;
     max-width: 100% !important;
+}
 }
 
 .main {
