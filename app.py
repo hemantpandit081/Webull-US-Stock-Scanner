@@ -86,7 +86,7 @@ div[data-testid="column"] {
 .stock-name {
     font-size: 9px;
     opacity: 0.55;
-    line-height: 31px;
+    line-height: 24px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
