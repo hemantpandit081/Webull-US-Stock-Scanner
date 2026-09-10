@@ -7,8 +7,8 @@ from zoneinfo import ZoneInfo
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import streamlit.components.v1 as components
 
-from webull import ApiClient, DataClient
-
+from webull.core.client import ApiClient
+from webull.data.data_client import DataClient
 
 # =========================================================
 # PAGE CONFIG
