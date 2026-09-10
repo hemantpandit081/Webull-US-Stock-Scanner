@@ -5,6 +5,7 @@ import os
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import streamlit.components.v1 as components
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from webull.core.client import ApiClient
 from webull.data.data_client import DataClient
@@ -30,10 +31,10 @@ st.markdown("""
 <style>
 
 .block-container {
-    padding-top: 0.6rem !important;
+    padding-top: 0.4rem !important;
     padding-bottom: 0rem !important;
-    padding-left: 0.35rem !important;
-    padding-right: 0.35rem !important;
+    padding-left: 0.25rem !important;
+    padding-right: 0.25rem !important;
     max-width: 100% !important;
 }
 
@@ -42,20 +43,20 @@ st.markdown("""
 }
 
 div[data-testid="column"] {
-    padding-left: 3px !important;
-    padding-right: 3px !important;
+    padding-left: 2px !important;
+    padding-right: 2px !important;
 }
 
 div.stButton > button {
-    min-height: 28px !important;
-    height: 28px !important;
-    padding: 0px 5px !important;
+    min-height: 27px !important;
+    height: 27px !important;
+    padding: 0px 4px !important;
     font-size: 12px !important;
 }
 
 .stock-value {
     font-size: 12px;
-    padding-top: 5px;
+    padding-top: 4px;
     white-space: nowrap;
 }
 
@@ -116,7 +117,9 @@ def load_settings():
     if os.path.exists(SETTINGS_FILE):
 
         try:
+
             with open(SETTINGS_FILE, "r") as file:
+
                 saved = json.load(file)
 
             result = DEFAULT_SETTINGS.copy()
@@ -135,6 +138,7 @@ def save_settings():
     try:
 
         with open(SETTINGS_FILE, "w") as file:
+
             json.dump(
                 st.session_state.settings,
                 file,
@@ -146,7 +150,9 @@ def save_settings():
 
 
 if "settings" not in st.session_state:
+
     st.session_state.settings = load_settings()
+
 
 settings = st.session_state.settings
 
@@ -156,25 +162,32 @@ settings = st.session_state.settings
 # =========================================================
 
 if "selected_symbol" not in st.session_state:
+
     st.session_state.selected_symbol = "AAPL"
 
-# Previous scan volume.
-# Used ONLY for RVOL.
+
 if "previous_volumes" not in st.session_state:
+
     st.session_state.previous_volumes = {}
 
-# Historical volumes.
-# Used ONLY for repeat detection.
+
 if "volume_history" not in st.session_state:
+
     st.session_state.volume_history = {}
 
+
 if "scan_results" not in st.session_state:
+
     st.session_state.scan_results = pd.DataFrame()
 
+
 if "scan_count" not in st.session_state:
+
     st.session_state.scan_count = 0
 
+
 if "last_scan_time" not in st.session_state:
+
     st.session_state.last_scan_time = None
 
 
@@ -221,6 +234,7 @@ STOCKS = [
 # =========================================================
 
 EXCHANGE_MAP = {
+
     "AAPL": "NASDAQ",
     "MSFT": "NASDAQ",
     "NVDA": "NASDAQ",
@@ -274,7 +288,7 @@ def market_is_open():
 
 
 # =========================================================
-# GET WEBULL SNAPSHOT
+# WEBULL SNAPSHOT
 # =========================================================
 
 def get_snapshot(symbol):
@@ -287,31 +301,81 @@ def get_snapshot(symbol):
         )
 
         if response.status_code != 200:
-            return None
+
+            return symbol, None
 
         data = response.json()
 
         if isinstance(data, list):
 
             if not data:
-                return None
 
-            return data[0]
+                return symbol, None
 
-        return data
+            return symbol, data[0]
+
+        return symbol, data
 
     except Exception:
 
-        return None
+        return symbol, None
+
+
+# =========================================================
+# FAST PARALLEL SNAPSHOT REQUEST
+# =========================================================
+
+def get_all_snapshots():
+
+    snapshots = {}
+
+    # -----------------------------------------------------
+    # Request multiple stocks simultaneously
+    # -----------------------------------------------------
+
+    max_workers = min(10, len(STOCKS))
+
+    with ThreadPoolExecutor(
+        max_workers=max_workers
+    ) as executor:
+
+        futures = {
+            executor.submit(
+                get_snapshot,
+                symbol
+            ): symbol
+
+            for symbol in STOCKS
+        }
+
+        for future in as_completed(futures):
+
+            try:
+
+                symbol, data = future.result()
+
+                if data is not None:
+
+                    snapshots[symbol] = data
+
+            except Exception:
+
+                continue
+
+    return snapshots
 
 
 # =========================================================
 # REPEAT VOLUME
 # =========================================================
 
-def check_repeat_volume(symbol, current_volume):
+def check_repeat_volume(
+    symbol,
+    current_volume
+):
 
     if current_volume <= 0:
+
         return False
 
     history = st.session_state.volume_history.get(
@@ -319,8 +383,8 @@ def check_repeat_volume(symbol, current_volume):
         []
     )
 
-    # First reading for this stock
-    if len(history) == 0:
+    # First reading
+    if not history:
 
         st.session_state.volume_history[symbol] = [
             current_volume
@@ -332,31 +396,28 @@ def check_repeat_volume(symbol, current_volume):
         settings["repeat_tolerance"]
     )
 
+    lower = tolerance
+    upper = 1.0 / tolerance
+
     repeat_found = False
 
-    # Check current volume against ALL old readings
     for old_volume in history:
 
         if old_volume <= 0:
+
             continue
 
         ratio = current_volume / old_volume
-
-        # 0.90 means:
-        # 90% to 111.11% of old volume
-        lower = tolerance
-        upper = 1.0 / tolerance
 
         if lower <= ratio <= upper:
 
             repeat_found = True
             break
 
-    # Store current reading
     history.append(current_volume)
 
-    # Keep last 200 readings per stock
     if len(history) > 200:
+
         history = history[-200:]
 
     st.session_state.volume_history[symbol] = history
@@ -365,139 +426,136 @@ def check_repeat_volume(symbol, current_volume):
 
 
 # =========================================================
-# SCAN
+# PROCESS ONE STOCK
+# =========================================================
+
+def process_stock(
+    symbol,
+    data
+):
+
+    try:
+
+        price = float(
+            data.get("price", 0) or 0
+        )
+
+        change_ratio = float(
+            data.get("change_ratio", 0) or 0
+        )
+
+        change_percent = change_ratio * 100
+
+        volume = float(
+            data.get("volume", 0) or 0
+        )
+
+        dollar_volume = price * volume
+
+        previous_volume = (
+            st.session_state.previous_volumes.get(
+                symbol
+            )
+        )
+
+        if (
+            previous_volume is not None
+            and previous_volume > 0
+        ):
+
+            rvol = volume / previous_volume
+
+        else:
+
+            rvol = 1.0
+
+        repeat = check_repeat_volume(
+            symbol,
+            volume
+        )
+
+        # Save volume for next scan
+        st.session_state.previous_volumes[
+            symbol
+        ] = volume
+
+        # -------------------------------------------------
+        # FILTERS
+        # -------------------------------------------------
+
+        if price < settings["min_price"]:
+            return None
+
+        if price > settings["max_price"]:
+            return None
+
+        if volume < settings["min_volume"]:
+            return None
+
+        if rvol < settings["min_rvol"]:
+            return None
+
+        if change_percent < settings["min_change"]:
+            return None
+
+        if dollar_volume < settings["min_dollar_volume"]:
+            return None
+
+        return {
+            "Symbol": symbol,
+            "Price": price,
+            "Change": change_percent,
+            "RVOL": rvol,
+            "Volume": volume,
+            "Dollar": dollar_volume,
+            "Repeat": repeat
+        }
+
+    except Exception:
+
+        return None
+
+
+# =========================================================
+# FAST SCANNER
 # =========================================================
 
 def scan_stocks():
 
+    # -----------------------------------------------------
+    # STEP 1
+    # Get all Webull snapshots in parallel
+    # -----------------------------------------------------
+
+    snapshots = get_all_snapshots()
+
     results = []
+
+    # -----------------------------------------------------
+    # STEP 2
+    # Process returned data
+    # -----------------------------------------------------
 
     for symbol in STOCKS:
 
-        data = get_snapshot(symbol)
+        data = snapshots.get(symbol)
 
         if data is None:
-            continue
-
-        try:
-
-            # ---------------------------------------------
-            # PRICE
-            # ---------------------------------------------
-
-            price = float(
-                data.get("price", 0) or 0
-            )
-
-            # ---------------------------------------------
-            # CHANGE %
-            # ---------------------------------------------
-
-            change_ratio = float(
-                data.get("change_ratio", 0) or 0
-            )
-
-            change_percent = change_ratio * 100
-
-            # ---------------------------------------------
-            # CURRENT VOLUME
-            # ---------------------------------------------
-
-            volume = float(
-                data.get("volume", 0) or 0
-            )
-
-            # ---------------------------------------------
-            # DOLLAR VOLUME
-            # ---------------------------------------------
-
-            dollar_volume = price * volume
-
-            # ---------------------------------------------
-            # RVOL
-            #
-            # Compare ONLY with previous scan.
-            # ---------------------------------------------
-
-            previous_volume = (
-                st.session_state.previous_volumes.get(
-                    symbol
-                )
-            )
-
-            if (
-                previous_volume is not None
-                and previous_volume > 0
-            ):
-
-                rvol = volume / previous_volume
-
-            else:
-
-                rvol = 1.0
-
-            # ---------------------------------------------
-            # REPEAT VOLUME
-            #
-            # Compare with historical readings.
-            # ---------------------------------------------
-
-            repeat = check_repeat_volume(
-                symbol,
-                volume
-            )
-
-            # ---------------------------------------------
-            # Save current volume for next RVOL
-            # ---------------------------------------------
-
-            st.session_state.previous_volumes[
-                symbol
-            ] = volume
-
-            # ---------------------------------------------
-            # FILTERS
-            # ---------------------------------------------
-
-            if price < settings["min_price"]:
-                continue
-
-            if price > settings["max_price"]:
-                continue
-
-            if volume < settings["min_volume"]:
-                continue
-
-            if rvol < settings["min_rvol"]:
-                continue
-
-            if change_percent < settings["min_change"]:
-                continue
-
-            if dollar_volume < settings["min_dollar_volume"]:
-                continue
-
-            # ---------------------------------------------
-            # ADD STOCK
-            # ---------------------------------------------
-
-            results.append({
-                "Symbol": symbol,
-                "Price": price,
-                "Change": change_percent,
-                "RVOL": rvol,
-                "Volume": volume,
-                "Dollar": dollar_volume,
-                "Repeat": repeat
-            })
-
-        except Exception:
 
             continue
 
-    # =====================================================
-    # NO RESULTS
-    # =====================================================
+        result = process_stock(
+            symbol,
+            data
+        )
+
+        if result is not None:
+
+            results.append(result)
+
+    # -----------------------------------------------------
+    # Empty result
+    # -----------------------------------------------------
 
     if not results:
 
@@ -513,11 +571,15 @@ def scan_stocks():
             ]
         )
 
-    # =====================================================
-    # SORT
-    # =====================================================
+    # -----------------------------------------------------
+    # DataFrame
+    # -----------------------------------------------------
 
     df = pd.DataFrame(results)
+
+    # -----------------------------------------------------
+    # Sort
+    # -----------------------------------------------------
 
     df = df.sort_values(
         by=[
@@ -541,13 +603,23 @@ def scan_stocks():
 
 def perform_scan():
 
-    st.session_state.scan_results = scan_stocks()
+    start = datetime.now()
+
+    df = scan_stocks()
+
+    st.session_state.scan_results = df
 
     st.session_state.scan_count += 1
 
     st.session_state.last_scan_time = datetime.now(
         ZoneInfo("Australia/Adelaide")
     )
+
+    elapsed = (
+        datetime.now() - start
+    ).total_seconds()
+
+    st.session_state.last_scan_seconds = elapsed
 
 
 # =========================================================
@@ -633,12 +705,11 @@ with st.sidebar:
     )
 
     st.caption(
-        "0.90 = current volume is within about "
-        "10% of an earlier volume level."
+        "0.90 = approximately ±10% volume range."
     )
 
     # -----------------------------------------------------
-    # REFRESH
+    # SCANNER
     # -----------------------------------------------------
 
     st.markdown("### Scanner")
@@ -678,16 +749,19 @@ with st.sidebar:
     )
 
     if current_interval not in intervals:
+
         current_interval = "1"
 
     chart_interval = st.selectbox(
         "Interval",
         intervals,
-        index=intervals.index(current_interval)
+        index=intervals.index(
+            current_interval
+        )
     )
 
     # -----------------------------------------------------
-    # UPDATE SETTINGS
+    # UPDATE
     # -----------------------------------------------------
 
     settings["min_price"] = min_price
@@ -715,7 +789,7 @@ with st.sidebar:
         st.success("Saved")
 
     # -----------------------------------------------------
-    # RESET HISTORY
+    # RESET
     # -----------------------------------------------------
 
     if st.button(
@@ -774,7 +848,7 @@ with header3:
 
 
 # =========================================================
-# SCANNER
+# SCANNER FRAGMENT
 # =========================================================
 
 @st.fragment(
@@ -800,16 +874,18 @@ def scanner():
     # STATUS
     # -----------------------------------------------------
 
-    s1, s2, s3, s4 = st.columns(
-        [2, 2, 2, 4]
+    s1, s2, s3, s4, s5 = st.columns(
+        [1.5, 1.5, 2, 2, 3]
     )
 
     with s1:
+
         st.caption(
             f"Stocks: {len(df)}"
         )
 
     with s2:
+
         st.caption(
             f"Scan: #{st.session_state.scan_count}"
         )
@@ -827,22 +903,37 @@ def scanner():
 
     with s4:
 
+        scan_time = st.session_state.get(
+            "last_scan_seconds",
+            0
+        )
+
+        st.caption(
+            f"Speed: {scan_time:.1f}s"
+        )
+
+    with s5:
+
         st.caption(
             "Auto: "
-            + ("ON" if settings["auto_scan"] else "OFF")
+            + (
+                "ON"
+                if settings["auto_scan"]
+                else "OFF"
+            )
             + f" • {settings['refresh_seconds']} sec"
         )
 
-    # -----------------------------------------------------
-    # 35 / 65 LAYOUT
-    # -----------------------------------------------------
+    # =====================================================
+    # 35 / 65
+    # =====================================================
 
     left, right = st.columns(
         [35, 65]
     )
 
     # =====================================================
-    # LEFT STOCK LIST
+    # LEFT
     # =====================================================
 
     with left:
@@ -880,22 +971,23 @@ def scanner():
 
                 symbol = row["Symbol"]
 
-                repeat = bool(row["Repeat"])
+                repeat = bool(
+                    row["Repeat"]
+                )
 
                 c1, c2, c3, c4, c5 = st.columns(
                     [1.5, 1.0, 1.0, 1.0, 1.3]
                 )
 
-                # -----------------------------------------
                 # SYMBOL
-                # -----------------------------------------
 
                 with c1:
 
-                    if repeat:
-                        label = "■ " + symbol
-                    else:
-                        label = symbol
+                    label = (
+                        "■ " + symbol
+                        if repeat
+                        else symbol
+                    )
 
                     if st.button(
                         label,
@@ -907,9 +999,7 @@ def scanner():
 
                         st.rerun()
 
-                # -----------------------------------------
                 # PRICE
-                # -----------------------------------------
 
                 with c2:
 
@@ -922,9 +1012,7 @@ def scanner():
                         unsafe_allow_html=True
                     )
 
-                # -----------------------------------------
                 # CHANGE
-                # -----------------------------------------
 
                 with c3:
 
@@ -937,9 +1025,7 @@ def scanner():
                         unsafe_allow_html=True
                     )
 
-                # -----------------------------------------
                 # RVOL
-                # -----------------------------------------
 
                 with c4:
 
@@ -952,13 +1038,13 @@ def scanner():
                         unsafe_allow_html=True
                     )
 
-                # -----------------------------------------
                 # DOLLAR VOLUME
-                # -----------------------------------------
 
                 with c5:
 
-                    dollar = float(row["Dollar"])
+                    dollar = float(
+                        row["Dollar"]
+                    )
 
                     if dollar >= 1_000_000_000:
 
@@ -980,7 +1066,9 @@ def scanner():
 
                     else:
 
-                        text = f"${dollar:.0f}"
+                        text = (
+                            f"${dollar:.0f}"
+                        )
 
                     st.markdown(
                         f"""
@@ -1007,10 +1095,6 @@ def scanner():
         st.markdown(
             f"#### {symbol}"
         )
-
-        # -------------------------------------------------
-        # TRADINGVIEW
-        # -------------------------------------------------
 
         tradingview_url = (
             "https://www.tradingview.com/widgetembed/"
@@ -1058,5 +1142,5 @@ scanner()
 # =========================================================
 
 st.caption(
-    "Webull US Momentum Scanner • Historical volume repeat detection"
+    "Webull US Momentum Scanner • Fast parallel snapshot scanning"
 )
